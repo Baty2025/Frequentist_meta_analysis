@@ -1,0 +1,306 @@
+---
+title: "**Frequentist Meta-analysis**"
+subtitle: "Estimation of the prevalence of epilepsy using a sample data set"
+author: "Mohammad Shah Jalal, University de Montréal"
+date: "2024-07-03"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: default
+    highlight: default
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=TRUE,echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE}
+
+#If needed install all packages listed below:
+#install.packages (c("readxl","xlsx","tidyverse","DescTools","binom","gtsummary","gt","metafor","meta","brms","bayesmeta","rstan","rstantools","bayestestR","posterior","bayesplot","ggdist","ggridges","glue","webshot2","tiff","knitr","loo","here"))
+
+
+library (readxl)     # For data input
+library (xlsx)       # For data input
+library(tidyverse)   #It includes "ggplot2","dplyr","tidyr","readr", "stringr', etc packages
+library(dplyr)
+library(DescTools)   #Tools for descriptive statistics, data visualization, and various statistical analyses
+library(binom)       #Binary data and binomial distributions. helps to calculate 95%CI
+library(forcats)
+library (gtsummary)  # generating tables
+library(gt)          # generating tables
+library(metafor)     # Frequentist meta-analysis 
+library(meta)        # Frequentist meta-analysis, includes Q-statistics and I-square
+library(brms)        #For Bayesian models for meta-analysis and meta-regression
+library(bayesmeta)   #Facilitates Bayesian meta-analysis
+library(rstan)       #To fit complex statistical models using Bayesian inference
+library(rstantools)  #For working with RStan
+library(bayestestR)  #For interpreting Bayesian models and isualization of results
+library(posterior)   #For summarizing and visualizing posterior distributions and diagnostics
+library(bayesplot)   #For creating plots to visualize Bayesian model results
+library(ggdist)      #To extend ggplot2 to include geoms for visualizing distributions
+library(ggridges)    # For comparing distributions in Bayesian modeling
+library(glue)        #To construct strings with embedded expressions; easy formating
+library(stringr)
+library(webshot2)    #R-Markdown:To include screenshots directly in reports or presentations
+library(tiff)        #R-Markdown: Reading and writing TIFF (Tagged Image File Format) files
+library(knitr)       #R-Markdown: file knitting
+library(loo)    
+library(here)
+
+
+
+knitr::opts_chunk$set(include = FALSE)
+```
+
+# **Introduction**
+
+A meta-analysis is a statistical approach that synthesizes quantitative findings from multiple studies investigating the same research topic.
+
+# **Models for meta-analysis**
+
+a)  ***Fixed-effect model*****:** This model assumes that studies included in a meta-analysis are functionally equivalent, sharing a common true effect size. Put differently, the true effect size is identical across studies, and any observed variation in effect size estimates is solely due to random sampling error within each study, known as within-study variance. The fixed-effect model applies when participants in the studies are drawn from a single common population and undergo the same experimental procedures conducted by the same researchers under identical conditions.However, such study rarely exist.
+
+b)  ***The random-effects model*****:** This model allows the included studies to have true effect sizes that are not identical or “fixed” but follow a normal distribution. In other words, the random-effects model accounts for both within-study and between-study variances, while the fixed-effect model assumes that the between-study variance is zero (i.e., between-study heterogeneity does not exist).As a general rule of thumb, the random-effects model will be more plausible than the fixed-effect model in most meta-analytic studies because the random-effects model allows more generalizable conclusions beyond a specific population. We will use it here.
+
+    The random-effects model can be estimated by several methods. Such as -
+
+    i)  **DL:** The method of moments or the DerSimonian and Laird method
+
+    ii) **REML:** The restricted maximum likelihood method
+
+        ***DL** and **REML** differ mainly in the estimation of the between-study variance.*
+
+# **Import data**
+
+```{r include=TRUE, echo=TRUE, eval=TRUE}
+
+
+library(here)
+tdat <- read_excel(here("Data", "Sample_data.xlsx"))                  
+
+tdat
+
+## Working data set
+df <- tdat
+
+
+
+
+df <- df %>% 
+  group_by(Study) %>% 
+  summarise(y = sum(Epi_cases),
+            n = sum(St_pop))
+  
+
+
+```
+
+# **Frequentist meta-analysis**
+
+## **Without transformation of the proportions**
+
+```{r}
+
+df <- df[order(df$Study), ]
+
+ma_mod_raw <- metaprop (y,
+                        n,
+                        Study,
+                        data = df,
+                        sm = "PRAW",
+                        method = "Inverse",
+                        method.tau = "DL",
+                        common = FALSE,
+                        random = TRUE,
+                        method.random.ci = TRUE)
+  
+
+
+summary(ma_mod_raw)
+
+
+```
+
+**Forest plot**
+
+```{r}
+png(filename = "Outputs/forest_plot_raw.png", 
+    width = 3000, 
+    height = 2000, 
+    res = 300)
+
+forest(
+  ma_mod_raw,
+  sortvar = studlab,             # Sort studies by effect size
+  layout = "RevMan5",           # Cochrane-style layout (,"meta","JAMA","BMJ" )
+  prediction = TRUE,                   # Add prediction interval
+  leftcols = c("studlab", "event", "n", "effect.ci"),  
+  leftlabs = c("Study", "Cases", "Total", "Prevalence [95% CI]"),
+  rightcols = c("w.random"),           # Show study weights
+  rightlabs = c("Weight"),
+  digits = 3,                          # Use 3 decimals for precision
+  digits.prop = 3,                     # Specific digits for proportions
+  digits.pval = 3,                     # Digits for p-values
+  colgap.forest.left = "0.3cm",
+  colgap.forest.right = "0.3cm",
+  colgap.studlab = "0.5cm",
+  
+  # Enhanced color scheme
+  col.study = "black",
+  col.square = "#2E86AB",              # Professional blue
+  col.square.lines = "#2E86AB",
+  col.diamond = "#A23B72",             # Professional purple
+  col.diamond.lines = "#A23B72",
+  col.circle = "#2E86AB",
+  col.circle.lines = "#2E86AB",
+  col.predict = "#F18F01",             # Amber for prediction interval
+  col.predict.lines = "#F18F01",
+  
+  # Improved typography and spacing
+  fontsize = 9,
+  fs.heading = 10,
+  fs.study = 9,
+  fs.study.labels = 9,
+  fs.axis = 9,
+  fs.smlab = 10,
+  fs.common = 9,
+  fs.random = 9,
+  fs.predict = 9,
+  spacing = 1.2,
+  
+  # Heterogeneity statistics - better placement
+  print.tau2 = TRUE,
+  print.tau2.ci = TRUE,               # Show tau² confidence interval
+  print.I2 = TRUE,
+  print.pval.Q = TRUE,
+  print.Q = TRUE,
+  hetstat = TRUE,
+  test.overall = TRUE,
+  test.overall.common = FALSE,        # Only show random effects test
+  
+  # Layout refinements
+  smlab = "",
+  xlab = "Prevalence",                # X-axis label
+  xlim = c(0, 1),                     # Set x-axis limits for proportions
+  at = seq(0, 1, 0.2),                # X-axis ticks
+  
+  # Remove redundancy
+  overall = TRUE,
+  common = FALSE,                     # Hide common effect model
+  overall.hetstat = TRUE,             # Show heterogeneity in summary
+  
+  # Additional professional touches
+  addrows = 1,                        # Add space above/below
+  calcwidth.hetstat = TRUE,
+  just = "left",
+  just.studlab = "left",
+  just.addcols = "center"
+)
+
+dev.off()
+```
+
+## **With *logit* transformation of the proportions**
+
+```{r}
+# With log transformation 
+
+pes.summary_plo <- metaprop (y,
+                             n, 
+                             Study,
+                             data = df,
+                             sm = "PLOGIT",
+                             method.tau = "ML",
+                             common = FALSE,
+                             random = TRUE,
+                             method.random.ci = TRUE)
+
+
+forest(pes.summary_plo, common = FALSE, random = TRUE, leftcols = "Study", frontsize = 8)
+
+summary(pes.summary_plo)
+```
+
+**Forest plot:\
+**
+
+```{r}
+
+png(filename = "Outputs/forest_plot_logit.png", 
+    width = 3000, 
+    height = 2000, 
+    res = 300)
+
+
+forest(
+  pes.summary_plo,
+  sortvar = studlab,             # Sort studies by effect size
+  layout = "RevMan5",           # Cochrane-style layout (,"meta","JAMA","BMJ" )
+  prediction = TRUE,                   # Add prediction interval
+  leftcols = c("studlab", "event", "n", "effect.ci"),  
+  leftlabs = c("Study", "Cases", "Total", "Prevalence [95% CI]"),
+  rightcols = c("w.random"),           # Show study weights
+  rightlabs = c("Weight"),
+  digits = 3,                          # Use 3 decimals for precision
+  digits.prop = 3,                     # Specific digits for proportions
+  digits.pval = 3,                     # Digits for p-values
+  colgap.forest.left = "0.3cm",
+  colgap.forest.right = "0.3cm",
+  colgap.studlab = "0.5cm",
+  
+  # Enhanced color scheme
+  col.study = "black",
+  col.square = "#2E86AB",              # Professional blue
+  col.square.lines = "#2E86AB",
+  col.diamond = "#A23B72",             # Professional purple
+  col.diamond.lines = "#A23B72",
+  col.circle = "#2E86AB",
+  col.circle.lines = "#2E86AB",
+  col.predict = "#F18F01",             # Amber for prediction interval
+  col.predict.lines = "#F18F01",
+  
+  # Improved typography and spacing
+  fontsize = 9,
+  fs.heading = 10,
+  fs.study = 9,
+  fs.study.labels = 9,
+  fs.axis = 9,
+  fs.smlab = 10,
+  fs.common = 9,
+  fs.random = 9,
+  fs.predict = 9,
+  spacing = 1.2,
+  
+  # Heterogeneity statistics - better placement
+  print.tau2 = TRUE,
+  print.tau2.ci = TRUE,               # Show tau² confidence interval
+  print.I2 = TRUE,
+  print.pval.Q = TRUE,
+  print.Q = TRUE,
+  hetstat = TRUE,
+  test.overall = TRUE,
+  test.overall.common = FALSE,        # Only show random effects test
+  
+  # Layout refinements
+  smlab = "",
+  xlab = "Prevalence",                # X-axis label
+  xlim = c(0, 1),                     # Set x-axis limits for proportions
+  at = seq(0, 1, 0.2),                # X-axis ticks
+  
+  # Remove redundancy
+  overall = TRUE,
+  common = FALSE,                     # Hide common effect model
+  overall.hetstat = TRUE,             # Show heterogeneity in summary
+  
+  # Additional professional touches
+  addrows = 1,                        # Add space above/below
+  calcwidth.hetstat = TRUE,
+  just = "left",
+  just.studlab = "left",
+  just.addcols = "center"
+)
+
+dev.off()
+```
